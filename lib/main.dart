@@ -6,6 +6,7 @@ import 'package:firebase_core/firebase_core.dart';
 
 import 'core/theme/app_theme.dart';
 import 'presentation/screens/auth/auth_gate.dart';
+import 'presentation/providers/settings_provider.dart';
 
 /// RideSync Phase 1 bootstrap.
 /// Free-first: Supabase + FCM + flutter_map. No Mapbox/Agora/OneSignal.
@@ -36,20 +37,18 @@ Future<void> main() async {
   runApp(const ProviderScope(child: RideSyncApp()));
 }
 
-class RideSyncApp extends StatelessWidget {
+class RideSyncApp extends ConsumerWidget {
   const RideSyncApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return MaterialApp(
       title: 'RideSync',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
-      // System theme; Phase 1 supports light + dark.
-      themeMode: ThemeMode.system,
-      // EN + HI ready. Actual strings land with Phase 1 l10n pass.
-      locale: const Locale('en'),
+      themeMode: ref.watch(themeModeProvider),
+      locale: ref.watch(localeProvider),
       supportedLocales: const [Locale('en'), Locale('hi')],
       home: const AuthGate(),
     );

@@ -3,7 +3,7 @@ import 'package:telephony/telephony.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../datasources/supabase_client.dart';
-import '../sos/sos_service.dart';
+import '../../services/sos/sos_service.dart';
 import 'poi_repository.dart';
 
 /// SOS triple-path: (1) Realtime Broadcast + sos_alerts row, (2) FCM via
