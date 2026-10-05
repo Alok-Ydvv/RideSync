@@ -1,5 +1,4 @@
 import 'package:geolocator/geolocator.dart';
-import 'package:telephony/telephony.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../datasources/supabase_client.dart';
@@ -10,7 +9,8 @@ import 'poi_repository.dart';
 /// DB-triggered push (server-side), (3) SMS via own SIM to emergency
 /// contacts (works without internet). Hospitals via cached poi-cache.
 class SosServiceImpl implements SosService {
-  final Telephony _telephony = Telephony.instance;
+  // No SMS plugin: SOS uses an sms: intent per contact (user taps send).
+  // Zero extra permissions, works on Android + iOS, AGP 8 safe.
 
   @override
   Future<void> trigger({required double lat, required double lng}) async {
@@ -48,12 +48,7 @@ class SosServiceImpl implements SosService {
       for (final row in (contacts as List? ?? [])) {
         final phone = (row as Map)['phone'] as String?;
         if (phone == null) continue;
-        try {
-          await _telephony.sendSms(to: phone, message: msg);
-        } catch (_) {
-          // Dual-SIM / permission edge: fall back to sms: intent.
-          await launchUrl(Uri.parse('sms:$phone?body=${Uri.encodeComponent(msg)}'));
-        }
+        await launchUrl(Uri.parse('sms:$phone?body=${Uri.encodeComponent(msg)}'));
       }
     } catch (_) {
       // SMS permission denied: caller shows manual share sheet.

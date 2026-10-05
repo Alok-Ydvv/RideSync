@@ -28,8 +28,11 @@ Future<void> main() async {
     debugPrint('RideSync: SUPABASE_URL/ANON_KEY missing — backend disabled.');
   }
 
+  // Guarded: firebase plugins auto-init the default app from
+  // google-services.json when present; a second initializeApp throws
+  // [core/duplicate-app] and trips the background-handler error.
   try {
-    await Firebase.initializeApp();
+    if (Firebase.apps.isEmpty) await Firebase.initializeApp();
   } catch (_) {
     debugPrint('RideSync: Firebase not configured yet — push disabled.');
   }
