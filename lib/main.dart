@@ -5,7 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:firebase_core/firebase_core.dart';
 
 import 'core/theme/app_theme.dart';
-import 'presentation/screens/home/home_screen.dart';
+import 'presentation/screens/auth/auth_gate.dart';
 
 /// RideSync Phase 1 bootstrap.
 /// Free-first: Supabase + FCM + flutter_map. No Mapbox/Agora/OneSignal.
@@ -51,7 +51,7 @@ class RideSyncApp extends StatelessWidget {
       // EN + HI ready. Actual strings land with Phase 1 l10n pass.
       locale: const Locale('en'),
       supportedLocales: const [Locale('en'), Locale('hi')],
-      home: const HomeScreen(),
+      home: const AuthGate(),
     );
   }
 }
