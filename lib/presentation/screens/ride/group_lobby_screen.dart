@@ -147,12 +147,14 @@ class GroupLobbyScreen extends ConsumerWidget {
                         v.id,
                       };
                     } else if (a == 'remove') {
-                      ref.read(readyVehiclesProvider.notifier).state = {
-                        ...ref.read(readyVehiclesProvider)..remove(v.id),
-                      };
-                      ref.read(pendingInvitesProvider.notifier).state = {
-                        ...ref.read(pendingInvitesProvider)..remove(v.id),
-                      };
+                      final readyNext =
+                          Set<String>.from(ref.read(readyVehiclesProvider))
+                            ..remove(v.id);
+                      ref.read(readyVehiclesProvider.notifier).state = readyNext;
+                      final pendNext =
+                          Set<String>.from(ref.read(pendingInvitesProvider))
+                            ..remove(v.id);
+                      ref.read(pendingInvitesProvider.notifier).state = pendNext;
                     }
                   },
                   itemBuilder: (_) => const [
