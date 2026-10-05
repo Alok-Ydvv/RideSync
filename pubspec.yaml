@@ -1,0 +1,72 @@
+name: ridesync
+description: "RideSync — group travel safety and tracking for bikers, car travellers, and solo riders. Phase 1 MVP (free-first)."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.13.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # State + backend
+  flutter_riverpod: ^2.6.1
+  supabase_flutter: ^2.8.0
+  flutter_dotenv: ^5.2.1
+  http: ^1.2.2
+
+  # Maps (free-first: OSM + PMTiles, no MAU billing)
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
+
+  # Location + background (Phase 1 tiers: 10s / 30s / 60s)
+  geolocator: ^13.0.2
+  permission_handler: ^11.3.1
+  flutter_foreground_task: ^11.0.3
+  workmanager: ^0.9.0
+  connectivity_plus: ^6.1.0
+
+  # Offline storage
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  sqflite: ^2.3.3
+  shared_preferences: ^2.3.2
+  path: ^1.9.0
+
+  # Push (FCM only, no OneSignal in Phase 1)
+  firebase_core: ^3.8.0
+  firebase_messaging: ^15.1.6
+  flutter_local_notifications: ^18.0.1
+
+  # Sharing / invites / media
+  share_plus: ^10.1.2
+  qr_flutter: ^4.1.0
+  mobile_scanner: ^5.2.0
+  app_links: ^6.0.0
+  image_picker: ^1.1.2
+  record: ^5.1.2
+  audioplayers: ^6.1.0
+
+  # SMS SOS via own SIM (Android). iOS falls back to url_launcher sms:
+  telephony: ^0.2.0
+  url_launcher: ^6.3.1
+
+  # Observability + utils (all free tiers)
+  sentry_flutter: ^8.10.1
+  logger: ^2.4.0
+  uuid: ^4.5.1
+  intl: ^0.20.3
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  build_runner: ^2.4.12
+  hive_generator: ^2.0.1
+
+flutter:
+  uses-material-design: true
