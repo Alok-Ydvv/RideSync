@@ -47,8 +47,9 @@ dependencies:
   mobile_scanner: ^5.2.0
   app_links: ^6.0.0
   image_picker: ^1.1.2
-  record: ^5.1.2
-  audioplayers: ^6.1.0
+  # Voice notes / PTT recording deferred to Phase 2 voice slice (record 5.x
+  # has skew in its federated linux/interface sub-packages and breaks
+  # kernel_snapshot; nothing imports it yet — chat sends text/photo/pin).
 
   # SMS SOS via sms: intent (url_launcher). Note: the `telephony` plugin was
   # dropped — v0.2.0 is unmaintained and fails AGP 8 builds (no namespace),
