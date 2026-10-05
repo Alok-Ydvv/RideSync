@@ -121,7 +121,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: _vehicle,
+                initialValue: _vehicle,
                 decoration: const InputDecoration(
                     labelText: 'Default vehicle', border: OutlineInputBorder()),
                 items: const [
@@ -135,7 +135,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: _blood,
+                      initialValue: _blood,
                       decoration: const InputDecoration(
                           labelText: 'Blood group (optional)',
                           border: OutlineInputBorder()),
@@ -208,7 +208,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                           validator: validatePhone,
                         ),
                         DropdownButtonFormField<String>(
-                          value: _contacts[i].relationship,
+                          initialValue: _contacts[i].relationship,
                           decoration: const InputDecoration(
                               labelText: 'Relationship'),
                           items: const [

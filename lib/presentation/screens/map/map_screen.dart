@@ -33,10 +33,19 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
   Future<void> _start() async {
     ref.read(trackingActiveProvider.notifier).state = true;
+    final blocked = await LocationService.ensurePermission();
+    if (blocked != null) {
+      if (blocked.contains('App Settings')) {
+        await Geolocator.openAppSettings();
+      } else if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(blocked)));
+      }
+    }
     try {
       await _loc.start(moving: true, inBackground: false);
     } catch (_) {
-      // Permission denied in emulator: fall back to simulated leader.
+      // No fix — demo seed below keeps the map demonstrable.
     }
     _gps = _loc.positions.listen(_onLeader);
     // Dev simulator: other vehicles trail the leader with fixed offsets.
@@ -247,6 +256,20 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 ),
               ),
             ),
+          Positioned(
+            bottom: over.isNotEmpty ? 76 : 16,
+            left: 12,
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 6),
+                child: Text(
+                  '🟢 Leader  🔵 Middle  🟠 Tail  🔴 Overspeed',
+                  style: Theme.of(context).textTheme.labelSmall,
+                ),
+              ),
+            ),
+          ),
           if (over.isNotEmpty)
             Positioned(
               bottom: 16,
@@ -262,6 +285,16 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               ),
             ),
         ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        heroTag: 'recenter',
+        mini: true,
+        onPressed: () {
+          if (pings.isNotEmpty) {
+            _map.move(pings.first.at, 15);
+          }
+        },
+        child: const Icon(Icons.my_location),
       ),
     );
   }

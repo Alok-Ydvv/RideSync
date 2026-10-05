@@ -81,8 +81,11 @@ class _NewRideScreenState extends ConsumerState<NewRideScreen> {
           distanceAlert: _distAlert,
         );
         final vehicles = await repo.addVehicles(g.id, slots);
+        // Leader drives vehicle #1 — no need to invite yourself.
+        await repo.assignDriver(vehicles.first.id, uid);
         ref.read(currentGroupProvider.notifier).state = g;
-        ref.read(vehiclesProvider.notifier).state = vehicles;
+        ref.read(vehiclesProvider.notifier).state =
+            await repo.fetchVehicles(g.id);
       } else {
         // Offline fallback: local group so lobby/map demo works without .env.
         final g = GroupModel(
@@ -97,14 +100,16 @@ class _NewRideScreenState extends ConsumerState<NewRideScreen> {
         );
         ref.read(currentGroupProvider.notifier).state = g;
         ref.read(vehiclesProvider.notifier).state = [
-          for (final s in slots)
+          for (var i = 0; i < slots.length; i++)
             VehicleModel(
               id: _uuid.v4(),
               groupId: g.id,
-              vehicleType: s['vehicle_type'] as String,
-              maxPassengers: s['max_passengers'] as int,
-              position: s['position'] as int,
-              role: s['role'] as String,
+              vehicleType: slots[i]['vehicle_type'] as String,
+              // Leader auto-drives slot #1 even offline.
+              driverId: i == 0 ? 'local' : null,
+              maxPassengers: slots[i]['max_passengers'] as int,
+              position: slots[i]['position'] as int,
+              role: slots[i]['role'] as String,
             ),
         ];
       }
@@ -133,6 +138,8 @@ class _NewRideScreenState extends ConsumerState<NewRideScreen> {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
+          const _StepsHeader(),
+          const SizedBox(height: 16),
           TextField(
             controller: _name,
             decoration: const InputDecoration(
@@ -264,6 +271,32 @@ class _NewRideScreenState extends ConsumerState<NewRideScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// 1 Ride type · 2 Vehicle · 3 Setup — single-page wizard progress header.
+class _StepsHeader extends StatelessWidget {
+  const _StepsHeader();
+  @override
+  Widget build(BuildContext context) {
+    const steps = ['1 · Ride', '2 · Vehicle', '3 · Setup'];
+    return Row(
+      children: [
+        for (var i = 0; i < steps.length; i++) ...[
+          if (i > 0)
+            const Expanded(child: Divider(thickness: 2, indent: 6, endIndent: 6)),
+          Chip(
+            avatar: CircleAvatar(
+              radius: 10,
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              child: Text('${i + 1}',
+                  style: const TextStyle(fontSize: 11, color: Colors.white)),
+            ),
+            label: Text(steps[i].substring(4)),
+          ),
+        ],
+      ],
     );
   }
 }

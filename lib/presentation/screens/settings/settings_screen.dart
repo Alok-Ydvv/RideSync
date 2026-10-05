@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/settings_provider.dart';
 import '../../providers/auth_provider.dart';
-import '../../../data/datasources/supabase_client.dart';
 
 /// Profile & Settings: edit profile, emergency contacts shortcut,
 /// language EN/HI, dark mode, sessions, delete account.

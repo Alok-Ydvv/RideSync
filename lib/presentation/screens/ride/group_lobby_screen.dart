@@ -2,19 +2,29 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../providers/ride_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../../core/utils/validators.dart';
-import '../map/map_screen.dart';
+import '../../../data/models/ride_models.dart';
+import 'active_ride_screen.dart';
 
 /// Waiting room before ride starts. Slots: Empty → Invited → Confirmed → Ready.
 /// Leader can invite (contacts/QR/6-digit/link), remove, mark ready, start ride.
-class GroupLobbyScreen extends ConsumerWidget {
+/// Start creates the ride row + flips group to active so commands/SOS/history
+/// all share one ride id.
+class GroupLobbyScreen extends ConsumerStatefulWidget {
   const GroupLobbyScreen({super.key});
+  @override
+  ConsumerState<GroupLobbyScreen> createState() => _GroupLobbyScreenState();
+}
 
-  Future<void> _inviteDialog(
-      BuildContext context, WidgetRef ref, String vehicleId) async {
+class _GroupLobbyScreenState extends ConsumerState<GroupLobbyScreen> {
+  static const _uuid = Uuid();
+  bool _starting = false;
+
+  Future<void> _inviteDialog(String vehicleId) async {
     final phone = TextEditingController();
     final ok = await showDialog<bool>(
       context: context,
@@ -65,7 +75,7 @@ class GroupLobbyScreen extends ConsumerWidget {
     };
   }
 
-  void _shareSheet(BuildContext context, WidgetRef ref) {
+  void _shareSheet() {
     final group = ref.read(currentGroupProvider);
     if (group == null) return;
     final link =
@@ -94,8 +104,48 @@ class GroupLobbyScreen extends ConsumerWidget {
     );
   }
 
+  Future<void> _startRide() async {
+    setState(() => _starting = true);
+    try {
+      final group = ref.read(currentGroupProvider);
+      if (group == null) return;
+      final repo = ref.read(rideRepositoryProvider);
+      try {
+        final ride = await repo.createRide(group.id);
+        await repo.setGroupStatus(group.id, 'active');
+        ref.read(activeRideProvider.notifier).state = ride;
+      } catch (_) {
+        // Offline: local ride so commands/SOS/history still work in demo.
+        ref.read(activeRideProvider.notifier).state = RideModel(
+          id: _uuid.v4(),
+          groupId: group.id,
+          status: 'active',
+        );
+      }
+      if (!mounted) return;
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const ActiveRideScreen()),
+      );
+    } finally {
+      if (mounted) setState(() => _starting = false);
+    }
+  }
+
+  Color _stateColor(String state) {
+    switch (state) {
+      case 'Ready':
+        return Colors.green;
+      case 'Confirmed':
+        return Colors.blue;
+      case 'Invited':
+        return Colors.amber.shade800;
+      default:
+        return Colors.grey;
+    }
+  }
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final group = ref.watch(currentGroupProvider);
     final vehicles = ref.watch(vehiclesProvider);
     final pending = ref.watch(pendingInvitesProvider);
@@ -105,13 +155,15 @@ class GroupLobbyScreen extends ConsumerWidget {
       return const Scaffold(
           body: Center(child: Text('Create a ride first.')));
     }
+    final readyCount =
+        vehicles.where((v) => v.driverId != null).length;
     return Scaffold(
       appBar: AppBar(
         title: Text(group.name),
         actions: [
           IconButton(
             icon: const Icon(Icons.qr_code_2),
-            onPressed: () => _shareSheet(context, ref),
+            onPressed: _shareSheet,
           ),
         ],
       ),
@@ -124,56 +176,67 @@ class GroupLobbyScreen extends ConsumerWidget {
                   '${group.rideType.toUpperCase()} · ${group.vehicleType.toUpperCase()}'),
               subtitle: Text(
                   'Code ${group.inviteCode} · Limit ${group.maxSpeedLimit ?? '-'} km/h · Gap ${group.distanceAlertThreshold}m'),
+              trailing: Chip(label: Text('$readyCount/${vehicles.length} ready')),
             ),
           ),
           const SizedBox(height: 8),
           for (final v in vehicles)
-            Card(
-              child: ListTile(
-                leading: CircleAvatar(
-                    child: Text(v.vehicleType == 'bike' ? '🏍' : '🚗')),
-                title: Text(
-                    '#${v.position} ${v.role.toUpperCase()} · ${v.vehicleType}'),
-                subtitle: Text(v.slotState(
-                    hasPendingInvite: pending.contains(v.id),
-                    ready: ready.contains(v.id))),
-                trailing: PopupMenuButton<String>(
-                  onSelected: (a) async {
-                    if (a == 'invite') {
-                      await _inviteDialog(context, ref, v.id);
-                    } else if (a == 'ready') {
-                      ref.read(readyVehiclesProvider.notifier).state = {
-                        ...ref.read(readyVehiclesProvider),
-                        v.id,
-                      };
-                    } else if (a == 'remove') {
-                      final readyNext =
-                          Set<String>.from(ref.read(readyVehiclesProvider))
-                            ..remove(v.id);
-                      ref.read(readyVehiclesProvider.notifier).state = readyNext;
-                      final pendNext =
-                          Set<String>.from(ref.read(pendingInvitesProvider))
-                            ..remove(v.id);
-                      ref.read(pendingInvitesProvider.notifier).state = pendNext;
-                    }
-                  },
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(value: 'invite', child: Text('Invite driver')),
-                    PopupMenuItem(value: 'ready', child: Text('Mark ready')),
-                    PopupMenuItem(value: 'remove', child: Text('Reset slot')),
-                  ],
+            Builder(builder: (context) {
+              final state = v.slotState(
+                  hasPendingInvite: pending.contains(v.id),
+                  ready: ready.contains(v.id));
+              return Card(
+                shape: RoundedRectangleBorder(
+                  side: BorderSide(color: _stateColor(state), width: 2),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-              ),
-            ),
+                child: ListTile(
+                  leading: CircleAvatar(
+                      backgroundColor: _stateColor(state).withValues(alpha: 0.15),
+                      child: Text(v.vehicleType == 'bike' ? '🏍' : '🚗')),
+                  title: Text(
+                      '#${v.position} ${v.role.toUpperCase()} · ${v.vehicleType}'),
+                  subtitle: Text(
+                    v.driverId != null ? '$state · driver set' : state,
+                    style: TextStyle(
+                        color: _stateColor(state),
+                        fontWeight: FontWeight.w700),
+                  ),
+                  trailing: PopupMenuButton<String>(
+                    onSelected: (a) async {
+                      if (a == 'invite') {
+                        await _inviteDialog(v.id);
+                      } else if (a == 'ready') {
+                        ref.read(readyVehiclesProvider.notifier).state = {
+                          ...ref.read(readyVehiclesProvider),
+                          v.id,
+                        };
+                      } else if (a == 'remove') {
+                        ref.read(readyVehiclesProvider.notifier).state =
+                            Set<String>.from(
+                                ref.read(readyVehiclesProvider))
+                              ..remove(v.id);
+                        ref.read(pendingInvitesProvider.notifier).state =
+                            Set<String>.from(
+                                ref.read(pendingInvitesProvider))
+                              ..remove(v.id);
+                      }
+                    },
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(
+                          value: 'invite', child: Text('Invite driver')),
+                      PopupMenuItem(value: 'ready', child: Text('Mark ready')),
+                      PopupMenuItem(value: 'remove', child: Text('Reset slot')),
+                    ],
+                  ),
+                ),
+              );
+            }),
           const SizedBox(height: 16),
           FilledButton.icon(
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const MapScreen()),
-              );
-            },
+            onPressed: _starting ? null : _startRide,
             icon: const Icon(Icons.play_arrow),
-            label: const Text('Start ride → Map'),
+            label: Text(_starting ? 'Starting…' : 'Start ride → Active'),
           ),
         ],
       ),

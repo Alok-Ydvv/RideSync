@@ -24,11 +24,16 @@ Future<void> main() async {
   }
 
   final url = envReady ? dotenv.maybeGet('SUPABASE_URL') : null;
-  final anon = envReady ? dotenv.maybeGet('SUPABASE_ANON_KEY') : null;
-  if (url != null && anon != null && url.startsWith('http')) {
-    await Supabase.initialize(url: url, anonKey: anon);
+  // supabase_flutter renamed anonKey → publishableKey. Accepts the new
+  // SUPABASE_PUBLISHABLE_KEY, falls back to legacy SUPABASE_ANON_KEY.
+  final pubKey = envReady
+      ? dotenv.maybeGet('SUPABASE_PUBLISHABLE_KEY') ??
+          dotenv.maybeGet('SUPABASE_ANON_KEY')
+      : null;
+  if (url != null && pubKey != null && url.startsWith('http')) {
+    await Supabase.initialize(url: url, publishableKey: pubKey);
   } else {
-    debugPrint('RideSync: SUPABASE_URL/ANON_KEY missing — backend disabled.');
+    debugPrint('RideSync: SUPABASE_URL/KEY missing — backend disabled.');
   }
 
   // Guarded: firebase plugins auto-init the default app from

@@ -21,12 +21,41 @@ class HomeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final group = ref.watch(currentGroupProvider);
+    final ride = ref.watch(activeRideProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('RideSync — Phase 1')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           const WeatherStrip(),
+          const SizedBox(height: 8),
+          if (group != null)
+            Card(
+              color: ride != null
+                  ? Colors.green.shade50
+                  : Theme.of(context).cardColor,
+              child: ListTile(
+                leading: Icon(
+                  ride != null ? Icons.radio_button_checked : Icons.timer,
+                  color: ride != null ? Colors.green : Colors.orange,
+                ),
+                title: Text(group.name,
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
+                subtitle: Text(ride != null
+                    ? 'Ride ACTIVE · ${group.vehicleType} · tap to continue'
+                    : 'Ride ready in lobby · tap to continue'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                      builder: (_) => ride != null
+                          ? const ActiveRideScreen()
+                          : const GroupLobbyScreen()),
+                ),
+              ),
+            ),
+          if (group != null) const SizedBox(height: 8),
+          const Text('Quick actions',
+              style: TextStyle(fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
           _tile(context, 'Start New Ride', Icons.navigation, AppColors.safe,
               'Solo / Group → Bike / Car / Mixed',

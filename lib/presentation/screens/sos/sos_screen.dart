@@ -1,20 +1,22 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../data/repositories/sos_service_impl.dart';
+import '../../providers/ride_provider.dart';
 
 /// SOS Screen: big red button always accessible. 10s cancel window,
-/// then triple-path fires (Broadcast + FCM + SIM SMS) + nearest hospital.
-class SosScreen extends StatefulWidget {
+/// then triple-path fires (Broadcast + FCM + sms: intent) + nearest hospital.
+class SosScreen extends ConsumerStatefulWidget {
   const SosScreen({super.key});
   @override
-  State<SosScreen> createState() => _SosScreenState();
+  ConsumerState<SosScreen> createState() => _SosScreenState();
 }
 
-class _SosScreenState extends State<SosScreen> {
+class _SosScreenState extends ConsumerState<SosScreen> {
   int _countdown = 0;
   Timer? _timer;
   List<Map<String, dynamic>> _hospitals = [];
@@ -45,7 +47,8 @@ class _SosScreenState extends State<SosScreen> {
   Future<void> _fire() async {
     try {
       final p = await Geolocator.getCurrentPosition();
-      await _svc.trigger(lat: p.latitude, lng: p.longitude);
+      final rideId = ref.read(activeRideProvider)?.id;
+      await _svc.trigger(lat: p.latitude, lng: p.longitude, rideId: rideId);
       setState(() => _loadingHosp = true);
       final h = await _svc.nearbyHospitals(p.latitude, p.longitude);
       if (mounted) {

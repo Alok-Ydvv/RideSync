@@ -75,9 +75,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     ref.read(authLoadingProvider.notifier).state = true;
     try {
       if (signup) {
-        await ref
+        final res = await ref
             .read(authRepositoryProvider)
             .signUpEmail(_email.text, _pass.text);
+        // Confirm-email ON → no session yet: tell the user to check inbox
+        // instead of silently staying on Login.
+        if (res.session == null && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text(
+                    'Account created — check your email to confirm, then sign in. (Dev tip: turn OFF “Confirm email” in Supabase Auth settings.)')),
+          );
+        }
       } else {
         await ref
             .read(authRepositoryProvider)

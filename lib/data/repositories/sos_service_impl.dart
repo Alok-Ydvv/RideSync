@@ -1,4 +1,3 @@
-import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../datasources/supabase_client.dart';
@@ -13,13 +12,13 @@ class SosServiceImpl implements SosService {
   // Zero extra permissions, works on Android + iOS, AGP 8 safe.
 
   @override
-  Future<void> trigger({required double lat, required double lng}) async {
+  Future<void> trigger(
+      {required double lat, required double lng, String? rideId}) async {
     final c = trySupabase();
     final uid = c?.auth.currentUser?.id;
     // 1. Group broadcast + durable row (best-effort offline).
     try {
       if (c != null && uid != null) {
-        final rideId = await _activeRideId(c);
         await c.from('sos_alerts').insert({
           'ride_id': rideId,
           'user_id': uid,
@@ -71,15 +70,5 @@ class SosServiceImpl implements SosService {
       double lat, double lng) async {
     return PoiRepository()
         .nearby(lat: lat, lng: lng, radius: 10000, category: 'hospital');
-  }
-
-  Future<String?> _activeRideId(dynamic c) async {
-    try {
-      final pos = await Geolocator.getLastKnownPosition();
-      if (pos == null) return null;
-      return null; // Ride linkage resolved by group context in UI slice.
-    } catch (_) {
-      return null;
-    }
   }
 }
