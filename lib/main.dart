@@ -14,14 +14,17 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Env is optional for UI-first dev (map/dashboard work without backend).
+  // maybeGet throws NotInitializedError if load failed, so gate on the flag.
+  var envReady = false;
   try {
     await dotenv.load(fileName: '.env');
+    envReady = true;
   } catch (_) {
     debugPrint('RideSync: .env not found, running in offline UI mode.');
   }
 
-  final url = dotenv.maybeGet('SUPABASE_URL');
-  final anon = dotenv.maybeGet('SUPABASE_ANON_KEY');
+  final url = envReady ? dotenv.maybeGet('SUPABASE_URL') : null;
+  final anon = envReady ? dotenv.maybeGet('SUPABASE_ANON_KEY') : null;
   if (url != null && anon != null && url.startsWith('http')) {
     await Supabase.initialize(url: url, anonKey: anon);
   } else {
