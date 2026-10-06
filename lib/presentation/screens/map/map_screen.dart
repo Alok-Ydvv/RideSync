@@ -171,7 +171,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     _gps?.cancel();
     _sim?.cancel();
     _loc.dispose();
-    ref.read(trackingActiveProvider.notifier).state = false;
+    // NOTE: don't mutate providers in dispose — Riverpod rebuilds listeners
+    // during tree teardown and trips a defunct-element assertion.
     super.dispose();
   }
 
