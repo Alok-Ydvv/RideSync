@@ -62,8 +62,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('OTP failed: $e')));
+        final raw = e.toString();
+        final isProviderMissing = raw.contains('provider') ||
+            raw.contains('Unsupported') ||
+            raw.contains(' not configured') ||
+            raw.contains(' 400');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            duration: const Duration(seconds: 6),
+            content: Text(isProviderMissing
+                ? 'Phone OTP needs an SMS provider configured in Supabase Auth (MSG91/Gupshup DLT). The free email login above works instantly.'
+                : 'OTP failed: $raw'),
+          ),
+        );
       }
     } finally {
       ref.read(authLoadingProvider.notifier).state = false;
@@ -130,30 +141,26 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text('Phone (OTP, primary)',
-                  style: TextStyle(fontWeight: FontWeight.w700)),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _phone,
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(
-                  prefixText: '+91 ',
-                  hintText: '10-digit mobile number',
-                  border: OutlineInputBorder(),
+              Center(
+                child: Column(
+                  children: [
+                    const CircleAvatar(
+                      radius: 34,
+                      backgroundColor: Color(0xFF16A34A),
+                      child: Icon(Icons.two_wheeler, color: Colors.white, size: 34),
+                    ),
+                    const SizedBox(height: 10),
+                    Text('RideSync',
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineSmall
+                            ?.copyWith(fontWeight: FontWeight.w800)),
+                    Text('Ride safe. Ride together.',
+                        style: Theme.of(context).textTheme.bodySmall),
+                  ],
                 ),
-                validator: validatePhone,
-              ),
-              const SizedBox(height: 12),
-              FilledButton(
-                onPressed: (loading || _resendIn > 0) ? null : _sendOtp,
-                child: Text(loading
-                    ? 'Sending…'
-                    : _resendIn > 0
-                        ? 'Resend in $_resendIn s'
-                        : 'Send OTP'),
               ),
               const SizedBox(height: 24),
-              const Divider(),
               const Text('Email + password',
                   style: TextStyle(fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
@@ -188,6 +195,38 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 24),
+              const Divider(),
+              const Text('Phone login (OTP)',
+                  style: TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 4),
+              Text(
+                'Needs an SMS provider in Supabase (MSG91/Gupshup DLT ≈ ₹0.50/SMS). Email login above is free & instant.',
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _phone,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(
+                  prefixText: '+91 ',
+                  hintText: '10-digit mobile number',
+                  border: OutlineInputBorder(),
+                ),
+                validator: validatePhone,
+              ),
+              const SizedBox(height: 12),
+              FilledButton(
+                onPressed: (loading || _resendIn > 0) ? null : _sendOtp,
+                child: Text(loading
+                    ? 'Sending…'
+                    : _resendIn > 0
+                        ? 'Resend in $_resendIn s'
+                        : 'Send OTP'),
               ),
               const SizedBox(height: 24),
               const Divider(),

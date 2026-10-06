@@ -81,9 +81,16 @@ class _NearbyScreenState extends State<NearbyScreen> {
           if (_busy) const LinearProgressIndicator(),
           Expanded(
             child: _items.isEmpty && !_busy
-                ? const Center(
-                    child: Text(
-                        'No results (offline or no backend yet).\nPre-downloaded POIs show here when cached.'))
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        'No ${cats[_cat]} found near you.\n'
+                        'Check your internet connection and try again.',
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  )
                 : ListView.builder(
                     itemCount: _items.length,
                     itemBuilder: (_, i) {

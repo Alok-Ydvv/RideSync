@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../../providers/ride_provider.dart';
 import '../../../data/repositories/route_repository.dart';
+import '../../../data/datasources/free_apis.dart';
 
-/// Phase 1 route planner: start + destination + waypoints, reorder,
-/// fastest/shortest/no-toll selector, distance/time/fuel, save + share.
-/// Leader computes once (Edge cache); group reuses.
+/// Phase 1 map-based route planner (free tiles: Carto Voyager).
+/// Tap the map to set Start / Stops / Destination, pick a preference,
+/// then compute — route renders as a real polyline with distance, time,
+/// fuel estimate. Works without Edge functions (falls to direct OSRM).
 class RoutePlannerScreen extends ConsumerStatefulWidget {
   const RoutePlannerScreen({super.key});
   @override
@@ -14,54 +19,85 @@ class RoutePlannerScreen extends ConsumerStatefulWidget {
 }
 
 class _RoutePlannerScreenState extends ConsumerState<RoutePlannerScreen> {
-  final _start = TextEditingController(text: '28.6139, 77.2090');
-  final _dest = TextEditingController(text: '28.5355, 77.3910');
-  final _stops = <TextEditingController>[];
+  final _map = MapController();
+  LatLng? _start;
+  final List<LatLng> _stops = [];
+  LatLng? _dest;
+  String _mode = 'start'; // start | stop | dest
   String _pref = 'fastest';
   bool _busy = false;
   Map<String, dynamic>? _info;
+  List<LatLng>? _poly;
 
-  @override
-  void dispose() {
-    _start.dispose();
-    _dest.dispose();
-    for (final c in _stops) {
-      c.dispose();
+  Future<void> _useGpsStart() async {
+    try {
+      final p = await Geolocator.getCurrentPosition();
+      setState(() => _start = LatLng(p.latitude, p.longitude));
+      _map.move(LatLng(p.latitude, p.longitude), 13);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not get GPS fix.')),
+        );
+      }
     }
-    super.dispose();
   }
 
-  Map<String, double>? _parse(String s) {
-    final parts = s.split(',').map((e) => e.trim()).toList();
-    if (parts.length != 2) return null;
-    final lat = double.tryParse(parts[0]);
-    final lng = double.tryParse(parts[1]);
-    if (lat == null || lng == null) return null;
-    return {'lat': lat, 'lng': lng};
+  void _onTap(TapPosition _, LatLng at) {
+    setState(() {
+      switch (_mode) {
+        case 'start':
+          _start = at;
+          break;
+        case 'stop':
+          _stops.add(at);
+          break;
+        case 'dest':
+          _dest = at;
+          break;
+      }
+    });
+  }
+
+  void _clear() {
+    setState(() {
+      _start = null;
+      _stops.clear();
+      _dest = null;
+      _info = null;
+      _poly = null;
+    });
   }
 
   Future<void> _compute() async {
-    final pts = <Map<String, double>>[];
-    final s = _parse(_start.text);
-    final d = _parse(_dest.text);
-    if (s == null || d == null) {
+    if (_start == null || _dest == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter lat,lng for start + destination.')),
+        const SnackBar(content: Text('Set a start and destination on the map.')),
       );
       return;
     }
-    pts.add(s);
-    for (final c in _stops) {
-      final p = _parse(c.text);
-      if (p != null) pts.add(p);
-    }
-    pts.add(d);
+    final wps = <LatLng>[_start!, ..._stops, _dest!];
     setState(() => _busy = true);
     try {
       final rideId = ref.read(activeRideProvider)?.id ?? 'local';
-      final info =
-          await RouteRepository().getRoute(rideId: rideId, waypoints: pts);
-      setState(() => _info = info);
+      final info = await RouteRepository().getRoute(
+        rideId: rideId,
+        waypoints: wps
+            .map((w) => <String, double>{'lat': w.latitude, 'lng': w.longitude})
+            .toList(),
+        pref: _pref,
+      );
+      final poly = info['encoded_polyline'] != null
+          ? decodePolyline(info['encoded_polyline'] as String)
+          : <LatLng>[];
+      setState(() {
+        _info = info;
+        _poly = poly;
+      });
+      if (poly.isNotEmpty) {
+        final bounds = LatLngBounds.fromPoints(poly);
+        _map.fitCamera(CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(50)));
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -74,85 +110,155 @@ class _RoutePlannerScreenState extends ConsumerState<RoutePlannerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final vType = ref.watch(vehicleTypeProvider);
     final distKm = ((_info?['total_distance'] as num?) ?? 0) / 1000;
     final durMin = ((_info?['estimated_duration'] as num?) ?? 0) / 60;
-    final vType = ref.watch(vehicleTypeProvider);
-    final mileage = vType == 'car' ? 15.0 : 40.0; // kmpl estimate
+    final mileage = vType == 'car' ? 15.0 : 40.0;
     final fuel = distKm / mileage;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Plan Route')),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: 'fastest', label: Text('Fastest')),
-              ButtonSegment(value: 'shortest', label: Text('Shortest')),
-              ButtonSegment(value: 'notoll', label: Text('No toll')),
-            ],
-            selected: {_pref},
-            onSelectionChanged: (s) => setState(() => _pref = s.first),
+      appBar: AppBar(
+        title: const Text('Plan Route'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.clear_all),
+            onPressed: _clear,
           ),
-          const SizedBox(height: 12),
-          TextField(
-              controller: _start,
-              decoration: const InputDecoration(
-                  labelText: 'Start (lat,lng)', border: OutlineInputBorder())),
-          const SizedBox(height: 8),
-          for (var i = 0; i < _stops.length; i++)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                        controller: _stops[i],
-                        decoration: InputDecoration(
-                            labelText: 'Stop ${i + 1} (lat,lng)',
-                            border: const OutlineInputBorder())),
+        ],
+      ),
+      body: Column(
+        children: [
+          SizedBox(
+            height: 320,
+            child: FlutterMap(
+              mapController: _map,
+              options: MapOptions(
+                initialCenter: const LatLng(28.6139, 77.2090),
+                initialZoom: 11,
+                onTap: _onTap,
+              ),
+              children: [
+                TileLayer(
+                  urlTemplate:
+                      'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
+                  subdomains: const ['a', 'b', 'c', 'd'],
+                  userAgentPackageName: 'com.ridesync.ridesync',
+                ),
+                if (_poly != null && _poly!.isNotEmpty)
+                  PolylineLayer(
+                    polylines: [
+                      Polyline(
+                        points: _poly!,
+                        color: const Color(0xFF2563EB),
+                        strokeWidth: 5,
+                      ),
+                    ],
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline),
-                    onPressed: () => setState(() {
-                      _stops[i].dispose();
-                      _stops.removeAt(i);
-                    }),
+                MarkerLayer(
+                  markers: [
+                    if (_start != null)
+                      Marker(
+                        point: _start!,
+                        width: 40,
+                        height: 40,
+                        child: const Icon(Icons.trip_origin,
+                            color: Colors.green, size: 32),
+                      ),
+                    for (var i = 0; i < _stops.length; i++)
+                      Marker(
+                        point: _stops[i],
+                        width: 32,
+                        height: 32,
+                        child: const Icon(Icons.flag,
+                            color: Colors.orange, size: 28),
+                      ),
+                    if (_dest != null)
+                      Marker(
+                        point: _dest!,
+                        width: 40,
+                        height: 40,
+                        child: const Icon(Icons.location_on,
+                            color: Colors.red, size: 32),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    ChoiceChip(
+                      label: const Text('Set Start'),
+                      selected: _mode == 'start',
+                      onSelected: (_) => setState(() => _mode = 'start'),
+                    ),
+                    ChoiceChip(
+                      label: const Text('+ Stop'),
+                      selected: _mode == 'stop',
+                      onSelected: (_) => setState(() => _mode = 'stop'),
+                    ),
+                    ChoiceChip(
+                      label: const Text('Set Destination'),
+                      selected: _mode == 'dest',
+                      onSelected: (_) => setState(() => _mode = 'dest'),
+                    ),
+                    ActionChip(
+                      label: const Text('GPS start'),
+                      onPressed: _useGpsStart,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(value: 'fastest', label: Text('Fastest')),
+                    ButtonSegment(value: 'shortest', label: Text('Shortest')),
+                    ButtonSegment(value: 'notoll', label: Text('No toll')),
+                  ],
+                  selected: {_pref},
+                  onSelectionChanged: (s) => setState(() => _pref = s.first),
+                ),
+                const SizedBox(height: 8),
+                FilledButton.icon(
+                  onPressed: _busy ? null : _compute,
+                  icon: _busy
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.directions),
+                  label: Text(_busy ? 'Routing…' : 'Compute route'),
+                ),
+                if (_info != null) ...[
+                  const SizedBox(height: 10),
+                  Card(
+                    color: theme.colorScheme.primaryContainer,
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Text(
+                        'Distance  ${distKm.toStringAsFixed(1)} km\n'
+                        'Time  ~${durMin.round()} min\n'
+                        'Fuel  ~${fuel.toStringAsFixed(1)} L @ ${mileage.round()} kmpl\n'
+                        '${_info!['estimated'] == true ? 'Offline estimate — syncs when online.' : _info!['cached'] == true ? 'Cached (shared to group).' : 'Fresh route (shared to group).'}',
+                        style: theme.textTheme.bodyLarge,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    'Pre-ride: offline tiles · weather strip · emergency contacts · members ready',
+                    style: theme.textTheme.bodySmall,
                   ),
                 ],
-              ),
+              ],
             ),
-          TextButton.icon(
-            onPressed: () =>
-                setState(() => _stops.add(TextEditingController())),
-            icon: const Icon(Icons.add),
-            label: const Text('Add stop'),
           ),
-          TextField(
-              controller: _dest,
-              decoration: const InputDecoration(
-                  labelText: 'Destination (lat,lng)',
-                  border: OutlineInputBorder())),
-          const SizedBox(height: 12),
-          FilledButton(
-            onPressed: _busy ? null : _compute,
-            child: Text(_busy ? 'Routing…' : 'Compute route ($_pref)'),
-          ),
-          if (_info != null) ...[
-            const SizedBox(height: 12),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(14),
-                child: Text(
-                  'Distance ${distKm.toStringAsFixed(1)} km\n'
-                  'Time ~${durMin.round()} min\n'
-                  'Fuel ~${fuel.toStringAsFixed(1)} L (@${mileage.round()} kmpl)\n'
-                  '${_info!['estimated'] == true ? 'Offline estimate — syncs when online.' : _info!['cached'] == true ? 'Cached route (shared to group).' : 'Fresh route (shared to group).'}',
-                ),
-              ),
-            ),
-            const Text(
-                'Pre-ride checklist: offline tiles + weather + emergency contacts + all members ready.'),
-          ],
         ],
       ),
     );
