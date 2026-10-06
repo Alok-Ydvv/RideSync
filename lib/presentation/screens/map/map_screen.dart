@@ -208,9 +208,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             options: MapOptions(initialCenter: center, initialZoom: 13),
             children: [
               TileLayer(
-                urlTemplate:
-                    'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
-                subdomains: const ['a', 'b', 'c', 'd'],
+                // OSM Mapnik public tiles — no API key required.
+                // Attribution required: © OpenStreetMap contributors.
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                 userAgentPackageName: 'com.ridesync.ridesync',
               ),
               MarkerLayer(
@@ -271,6 +271,12 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 ),
               ),
             ),
+          ),
+          const Positioned(
+            bottom: 4,
+            right: 8,
+            child: Text('© OpenStreetMap contributors',
+                style: TextStyle(fontSize: 10, color: Colors.black54)),
           ),
           if (over.isNotEmpty)
             Positioned(

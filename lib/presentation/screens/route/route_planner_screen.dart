@@ -140,9 +140,8 @@ class _RoutePlannerScreenState extends ConsumerState<RoutePlannerScreen> {
               ),
               children: [
                 TileLayer(
-                  urlTemplate:
-                      'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
-                  subdomains: const ['a', 'b', 'c', 'd'],
+                  // OSM Mapnik public tiles — no API key required.
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                   userAgentPackageName: 'com.ridesync.ridesync',
                 ),
                 if (_poly != null && _poly!.isNotEmpty)
