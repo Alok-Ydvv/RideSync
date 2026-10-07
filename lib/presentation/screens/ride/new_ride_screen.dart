@@ -6,6 +6,7 @@ import '../../providers/ride_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../../data/models/ride_models.dart';
 import '../../../data/datasources/supabase_client.dart';
+import '../../../data/repositories/route_repository.dart';
 import 'group_lobby_screen.dart';
 
 /// Step 1: Solo / Group. Step 2: Bike / Car (+Mixed for groups).
@@ -25,11 +26,77 @@ class _NewRideScreenState extends ConsumerState<NewRideScreen> {
   bool _creating = false;
   static const _uuid = Uuid();
 
+  Map<String, dynamic>? _selectedSaved;
+  late Future<List<Map<String, dynamic>>> _savedFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _savedFuture = RouteRepository().savedRoutes();
+  }
+
   @override
   void dispose() {
     _name.dispose();
     super.dispose();
   }
+
+  Future<void> _pickSavedRoute() async {
+    final parentCtx = context;
+    final saved = await showModalBottomSheet<Map<String, dynamic>?>(
+      context: parentCtx,
+      builder: (ctx) => SafeArea(
+        child: FutureBuilder<List<Map<String, dynamic>>>(
+          future: _savedFuture,
+          builder: (c, snap) {
+            final items = snap.data ?? const <Map<String, dynamic>>[];
+            if (snap.connectionState != ConnectionState.done) {
+              return const Padding(
+                padding: EdgeInsets.all(24),
+                child: Center(child: CircularProgressIndicator()),
+              );
+            }
+            if (items.isEmpty) {
+              return const Padding(
+                padding: EdgeInsets.all(24),
+                child: Text(
+                  'No saved routes yet.\nPlan one in the Route Planner and tap the bookmark icon to save it.',
+                  textAlign: TextAlign.center,
+                ),
+              );
+            }
+            return ListView(
+              shrinkWrap: true,
+              children: [
+                ListTile(
+                  title: const Text('None — plan later'),
+                  onTap: () => Navigator.pop(ctx, _NewRideScreenState._clearToken),
+                ),
+                for (final r in items)
+                  ListTile(
+                    leading: const Icon(Icons.bookmark),
+                    title: Text(r['name']?.toString() ?? 'Route'),
+                    subtitle: Text(
+                        '${(((r['distance'] as num?) ?? 0) / 1000).toStringAsFixed(1)} km'),
+                    onTap: () => Navigator.pop(ctx, r),
+                  ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+    if (saved == _clearToken) {
+      setState(() => _selectedSaved = null);
+      ref.read(pendingSavedRouteProvider.notifier).state = null;
+    }
+    if (saved != null) {
+      setState(() => _selectedSaved = saved);
+      ref.read(pendingSavedRouteProvider.notifier).state = saved;
+    }
+  }
+
+  static const _clearToken = <String, dynamic>{};
 
   List<Map<String, dynamic>> _buildSlots(String rideType, String vType) {
     if (rideType == 'solo') {
@@ -172,6 +239,17 @@ class _NewRideScreenState extends ConsumerState<NewRideScreen> {
             selected: {vType},
             onSelectionChanged: (s) =>
                 ref.read(vehicleTypeProvider.notifier).state = s.first,
+          ),
+          const SizedBox(height: 12),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.bookmark),
+            title: Text(_selectedSaved?['name']?.toString() ?? 'Saved route',
+                style: const TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: const Text(
+                'Optional — reuse a saved route in the planner'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: _pickSavedRoute,
           ),
           const SizedBox(height: 16),
           if (rideType == 'solo') ...[

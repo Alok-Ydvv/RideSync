@@ -8,6 +8,7 @@ import '../../providers/ride_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../../core/utils/validators.dart';
 import '../../../data/models/ride_models.dart';
+import '../route/route_planner_screen.dart';
 import 'active_ride_screen.dart';
 
 /// Waiting room before ride starts. Slots: Empty → Invited → Confirmed → Ready.
@@ -175,7 +176,7 @@ class _GroupLobbyScreenState extends ConsumerState<GroupLobbyScreen> {
               title: Text(
                   '${group.rideType.toUpperCase()} · ${group.vehicleType.toUpperCase()}'),
               subtitle: Text(
-                  'Code ${group.inviteCode} · Limit ${group.maxSpeedLimit ?? '-'} km/h · Gap ${group.distanceAlertThreshold}m'),
+                  'Code ${group.inviteCode} · Limit ${group.maxSpeedLimit ?? '-'} km/h · Gap ${group.distanceAlertThreshold}m${ref.watch(pendingSavedRouteProvider) != null ? '\nRoute: ${ref.watch(pendingSavedRouteProvider)!['name']}' : ''}'),
               trailing: Chip(label: Text('$readyCount/${vehicles.length} ready')),
             ),
           ),
@@ -237,6 +238,14 @@ class _GroupLobbyScreenState extends ConsumerState<GroupLobbyScreen> {
             onPressed: _starting ? null : _startRide,
             icon: const Icon(Icons.play_arrow),
             label: Text(_starting ? 'Starting…' : 'Start ride → Active'),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const RoutePlannerScreen()),
+            ),
+            icon: const Icon(Icons.route),
+            label: const Text('Plan / load route'),
           ),
         ],
       ),

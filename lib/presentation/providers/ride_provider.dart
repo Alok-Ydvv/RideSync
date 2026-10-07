@@ -16,3 +16,7 @@ final vehiclesProvider = StateProvider<List<VehicleModel>>((ref) => []);
 final pendingInvitesProvider = StateProvider<Set<String>>((ref) => {});
 final readyVehiclesProvider = StateProvider<Set<String>>((ref) => {});
 final activeRideProvider = StateProvider<RideModel?>((ref) => null);
+
+/// Saved route selected during setup — pre-loads RoutePlanner.
+final pendingSavedRouteProvider =
+    StateProvider<Map<String, dynamic>?>((ref) => null);

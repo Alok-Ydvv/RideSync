@@ -8,7 +8,7 @@ import '../../providers/ride_provider.dart';
 import '../../../data/repositories/route_repository.dart';
 import '../../../data/datasources/free_apis.dart';
 
-/// Phase 1 map-based route planner (free tiles: Carto Voyager).
+/// Phase 1 map-based route planner (free tiles: OpenTopoMap).
 /// Tap the map to set Start / Stops / Destination, pick a preference,
 /// then compute — route renders as a real polyline with distance, time,
 /// fuel estimate. Works without Edge functions (falls to direct OSRM).
@@ -28,6 +28,93 @@ class _RoutePlannerScreenState extends ConsumerState<RoutePlannerScreen> {
   bool _busy = false;
   Map<String, dynamic>? _info;
   List<LatLng>? _poly;
+  String? _loadedSavedName;
+  bool _loadedSaved = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Auto-load a saved route selected during ride setup.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeLoadSaved());
+  }
+
+  Future<void> _maybeLoadSaved() async {
+    if (_loadedSaved) return;
+    final saved = ref.read(pendingSavedRouteProvider);
+    if (saved == null) return;
+    _loadedSaved = true;
+    final wps = (saved['waypoints'] as List? ?? [])
+        .map((e) => LatLng(
+            (e['lat'] as num).toDouble(), (e['lng'] as num).toDouble()))
+        .toList();
+    if (wps.length < 2) return;
+    setState(() {
+      _loadedSavedName = (saved['name'] ?? 'Route').toString();
+      _start = wps.first;
+      _stops
+        ..clear()
+        ..addAll(wps.sublist(1, wps.length - 1));
+      _dest = wps.last;
+    });
+    ref.read(pendingSavedRouteProvider.notifier).state = null;
+    await _compute();
+  }
+
+  Future<void> _saveRoute() async {
+    if (_start == null || _dest == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Plan a route first, then save it.')),
+      );
+      return;
+    }
+    final name = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        final ctrl = TextEditingController();
+        return AlertDialog(
+          title: const Text('Save route'),
+          content: TextField(
+            controller: ctrl,
+            autofocus: true,
+            decoration: const InputDecoration(
+                hintText: 'e.g. Delhi → Leh highway run'),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+                child: const Text('Save')),
+          ],
+        );
+      },
+    );
+    if (name == null || name.isEmpty) return;
+    final wps = <LatLng>[_start!, ..._stops, _dest!];
+    try {
+      await RouteRepository().saveRoute(
+        name: name,
+        waypoints: wps
+            .map((w) =>
+                <String, double>{'lat': w.latitude, 'lng': w.longitude})
+            .toList(),
+        distanceMeters: (_info?['total_distance'] as num?)?.toDouble(),
+        durationSeconds: (_info?['estimated_duration'] as num?)?.toInt(),
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Saved "$name" to your routes.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Save failed: $e')));
+      }
+    }
+  }
 
   Future<void> _useGpsStart() async {
     try {
@@ -122,6 +209,11 @@ class _RoutePlannerScreenState extends ConsumerState<RoutePlannerScreen> {
         title: const Text('Plan Route'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.bookmark_add),
+            tooltip: 'Save route',
+            onPressed: _saveRoute,
+          ),
+          IconButton(
             icon: const Icon(Icons.clear_all),
             onPressed: _clear,
           ),
@@ -131,7 +223,9 @@ class _RoutePlannerScreenState extends ConsumerState<RoutePlannerScreen> {
         children: [
           SizedBox(
             height: 320,
-            child: FlutterMap(
+            child: Stack(
+              children: [
+                FlutterMap(
               mapController: _map,
               options: MapOptions(
                 initialCenter: const LatLng(28.6139, 77.2090),
@@ -140,8 +234,9 @@ class _RoutePlannerScreenState extends ConsumerState<RoutePlannerScreen> {
               ),
               children: [
                 TileLayer(
-                  // OSM Mapnik public tiles — no API key required.
-                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  urlTemplate:
+                      'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+                  subdomains: const ['a', 'b', 'c'],
                   userAgentPackageName: 'com.ridesync.ridesync',
                 ),
                 if (_poly != null && _poly!.isNotEmpty)
@@ -181,6 +276,14 @@ class _RoutePlannerScreenState extends ConsumerState<RoutePlannerScreen> {
                             color: Colors.red, size: 32),
                       ),
                   ],
+                ),
+                ],
+                ),
+                const Positioned(
+                  bottom: 4,
+                  right: 8,
+                  child: Text('© OSM contributors · © SRTM · OpenTopoMap',
+                      style: TextStyle(fontSize: 10, color: Colors.black54)),
                 ),
               ],
             ),
@@ -235,6 +338,14 @@ class _RoutePlannerScreenState extends ConsumerState<RoutePlannerScreen> {
                       : const Icon(Icons.directions),
                   label: Text(_busy ? 'Routing…' : 'Compute route'),
                 ),
+                if (_loadedSavedName != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Chip(
+                      avatar: const Icon(Icons.bookmark, size: 16),
+                      label: Text('Loaded saved route: $_loadedSavedName'),
+                    ),
+                  ),
                 if (_info != null) ...[
                   const SizedBox(height: 10),
                   Card(

@@ -2,6 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../datasources/supabase_client.dart';
 import '../datasources/free_apis.dart';
+import '../../core/errors/failures.dart';
 
 /// Phase 1 route repo: leader computes once via Edge `route-cache` (OSRM),
 /// result shared to group via ride_routes. Direct OSRM as fallback; offline
@@ -34,6 +35,46 @@ class RouteRepository {
     );
     if (direct != null) return direct;
     return _estimate(waypoints);
+  }
+
+  /// Saved routes for this user, newest first. Empty when no backend.
+  Future<List<Map<String, dynamic>>> savedRoutes() async {
+    final c = trySupabase();
+    final uid = c?.auth.currentUser?.id;
+    if (c == null || uid == null) return [];
+    try {
+      final res = await c
+          .from('saved_routes')
+          .select()
+          .eq('user_id', uid)
+          .order('created_at', ascending: false)
+          .limit(50);
+      return (res as List).cast<Map<String, dynamic>>();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> saveRoute({
+    required String name,
+    required List<Map<String, double>> waypoints,
+    double? distanceMeters,
+    int? durationSeconds,
+    String? description,
+  }) async {
+    final c = trySupabase();
+    final uid = c?.auth.currentUser?.id;
+    if (c == null || uid == null) {
+      throw const NetworkFailure('Sign in to save routes.');
+    }
+    await c.from('saved_routes').insert({
+      'user_id': uid,
+      'name': name,
+      'waypoints': waypoints,
+      'distance': distanceMeters,
+      'estimated_duration': durationSeconds,
+      'description': description,
+    });
   }
 
   Map<String, dynamic> _estimate(List<Map<String, double>> wps) {
